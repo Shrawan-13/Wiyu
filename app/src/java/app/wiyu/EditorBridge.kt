@@ -30,9 +30,14 @@ object EditorBridge {
     fun viewIntent(context: Context, uri: Uri, mime: String?): Intent =
         Intent(context, LibreOfficeMainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            setDataAndType(uri, mime ?: FileTypes.mimeFor(uri.lastPathSegment) ?: "application/octet-stream")
+            val resolved = mime ?: FileTypes.mimeFor(uri.lastPathSegment) ?: "application/octet-stream"
+            setDataAndType(uri, resolved)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            if (uri.scheme == "content") addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            // PDFs are import-only: never hand out a write grant, so the editor
+            // cannot write a converted document back over the original.
+            if (uri.scheme == "content" && !resolved.equals("application/pdf", ignoreCase = true)) {
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
         }
 
     /** Chooser for "open with another app"; the engine is deliberately excluded. */

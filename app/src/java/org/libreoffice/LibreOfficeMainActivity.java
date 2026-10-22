@@ -189,7 +189,20 @@ public class LibreOfficeMainActivity extends AppCompatActivity implements Shared
                 String displayName = FileUtilities.retrieveDisplayNameForDocumentUri(getContentResolver(), docUri);
                 toolbarTop.setTitle(displayName);
 
+            } else if (docUri.getScheme().equals(ContentResolver.SCHEME_FILE)) {
+                String path = docUri.getLastPathSegment();
+                if (path != null) {
+                    toolbarTop.setTitle(path);
+                }
             }
+
+            // PDF is import-only here: the engine can read it, but writing the
+            // temporary copy back over the original would corrupt the file, so
+            // the document is always opened read-only.
+            if (isPdfDocument(docUri)) {
+                mbReadOnlyDoc = true;
+            }
+
             // create a temporary local copy to work with
             boolean copyOK = copyFileToTemp(docUri) && mTempFile != null;
             if (!copyOK) {
@@ -483,6 +496,23 @@ public class LibreOfficeMainActivity extends AppCompatActivity implements Shared
             Log.w(LOGTAG, "Cannot determine MIME type to use.");
             return "";
         }
+    }
+
+    /** True for PDFs, which Wiyu opens as read-only documents. */
+    private boolean isPdfDocument(final Uri uri) {
+        String type = getIntent().getType();
+        if (type == null) {
+            try {
+                type = getContentResolver().getType(uri);
+            } catch (Exception e) {
+                type = null;
+            }
+        }
+        if (type == null) {
+            final String path = uri.getLastPathSegment();
+            return path != null && path.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf");
+        }
+        return "application/pdf".equalsIgnoreCase(type);
     }
 
     /**
