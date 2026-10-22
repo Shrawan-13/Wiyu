@@ -1,5 +1,7 @@
 # Wiyu
 
+[![Build debug APK](https://github.com/Shrawan-13/Wiyu/actions/workflows/android-debug.yml/badge.svg)](https://github.com/Shrawan-13/Wiyu/actions/workflows/android-debug.yml)
+
 Wiyu is an Android document viewer **and editor**, built on the LibreOffice
 engine. It opens ODF, OOXML, RTF, CSV, SVG and the other formats LibreOffice
 handles, renders documents through LibreOfficeKit, and lets the user edit them.
@@ -52,6 +54,22 @@ LICENSES/                 MPL 2.0 / LGPL / ALv2 texts
 2. **`app/src/java/.../canvas`, `overlay`, `LOKit*`, `Tile*` are engine code.**
    UI work happens in `ui/` (the document browser) and in new screens; the
    viewer/editor surface is treated as a black box.
+
+## Building
+
+CI builds a debug APK on every push to `main`, on pull requests and on demand
+(`.github/workflows/android-debug.yml`); the APK is uploaded as a run artifact.
+Locally: `./gradlew :app:assembleDebug`.
+
+The LibreOffice engine is not rebuilt in CI. It is downloaded from the
+[`lo-core-v1`](https://github.com/Shrawan-13/Wiyu/releases/tag/lo-core-v1)
+release and consumed through the "prebuilt bundle" path — see
+[docs/BUILDING.md](docs/BUILDING.md).
+
+Caching layers, in order of impact: the engine bundle (80 MB, restored in ~2 s),
+Gradle user home (dependencies, wrapper, build cache), the Android SDK
+packages, and Gradle's own task output cache. A warm debug build takes roughly
+2.5 minutes; a cold one is dominated by toolchain downloads.
 
 ## Roadmap
 
