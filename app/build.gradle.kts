@@ -1,5 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
+    // Required by Compose with Kotlin 2.x. Pinned to the Kotlin version that
+    // AGP 9's built-in Kotlin support ships (see com.android.tools.build:gradle).
+    alias(libs.plugins.compose.compiler)
 }
 
 // buildhost settings - paths and the like
