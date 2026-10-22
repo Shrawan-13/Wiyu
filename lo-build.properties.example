@@ -1,0 +1,37 @@
+# lo-build.properties.example
+#
+# Copy to lo-build.properties (git-ignored) and point it at a LibreOffice core
+# build tree. Every key can also be passed as -P<key>=<value> on the Gradle
+# command line, which takes precedence over this file.
+
+# --- paths -----------------------------------------------------------------
+
+# Scratch build directory of the core build.
+liboWorkdir=libreoffice-build/workdir
+
+# Installation tree produced by `make install` in the core build.
+# Typically: <core>/workdir/installation/LibreOfficeAndroid/instdir
+liboInstdir=libreoffice-build/instdir
+
+# Where libo-native-code.so and the bundled .so files live.
+# Relative paths are resolved against the app/ module.
+liboJniLibsdir=jniLibs
+
+# --- toolchain -------------------------------------------------------------
+
+# Leave empty to use the NDK installed in the Android SDK.
+androidNdkPath=
+androidNdkVersion=
+
+# --- identity --------------------------------------------------------------
+
+# Must match the core build (written into bootstraprc as the product key).
+liboVersionMajor=27
+liboVersionMinor=2
+liboGitFullCommit=unknown
+
+androidApplicationId=app.wiyu
+androidVersionName=1.0.0
+androidMinSdkVersion=21
+vendor=Wiyu
+privacyPolicyUrl=
