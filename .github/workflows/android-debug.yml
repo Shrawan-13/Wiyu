@@ -142,6 +142,11 @@ jobs:
           ./gradlew :app:assembleDebug \
             --build-cache --parallel --stacktrace
 
+      # The manifest/registry parity test lives here: it is what keeps the
+      # intent filters and app/wiyu/data/FileTypes.kt from drifting apart.
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --build-cache --parallel --stacktrace
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

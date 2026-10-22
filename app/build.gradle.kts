@@ -55,12 +55,15 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.core)
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.core.ktx)
     implementation(libs.documentfile)
     debugImplementation(libs.compose.ui.tooling)
+
+    testImplementation(libs.junit)
 }
 
 base {

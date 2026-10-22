@@ -4,6 +4,7 @@ compose_bom_version = "2025.09.00"
 constraintlayout_version = "2.2.1"
 core_ktx_version = "1.16.0"
 documentfile_version = "1.1.0"
+junit_version = "4.13.2"
 gradle_version = "9.4.1"
 material_version = "1.13.0"
 preference_version = "1.2.1"
@@ -13,12 +14,14 @@ activity-compose = { module = "androidx.activity:activity-compose", version.ref 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose_bom_version" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core_ktx_version" }
 documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile_version" }
+junit = { module = "junit:junit", version.ref = "junit_version" }
 constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout_version" }
 gradle = { module = "com.android.tools.build:gradle", version.ref = "gradle_version" }
 material = { module = "com.google.android.material:material", version.ref = "material_version" }

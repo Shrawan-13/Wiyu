@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-path name="LO_files_universal" path="Android/" />
+    <!-- Copies staged for the share sheet (file:// documents cannot be shared directly). -->
+    <cache-path name="wiyu_share" path="share/" />
 </paths>

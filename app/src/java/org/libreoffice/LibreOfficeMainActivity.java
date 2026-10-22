@@ -19,6 +19,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.IntentCompat;
 import androidx.preference.PreferenceManager;
 import android.text.InputType;
 import android.util.Log;
@@ -169,8 +170,17 @@ public class LibreOfficeMainActivity extends AppCompatActivity implements Shared
 
         mbReadOnlyDoc = false;
 
-        final Uri docUri = getIntent().getData();
+        Uri incoming = getIntent().getData();
+        if (incoming == null) {
+            // ACTION_SEND / SEND_MULTIPLE hand the document over as a stream
+            // extra rather than as the intent data.
+            incoming = IntentCompat.getParcelableExtra(getIntent(), Intent.EXTRA_STREAM, Uri.class);
+        }
+        final Uri docUri = incoming;
         if (docUri != null) {
+            // Documents can reach the editor without going through the Wiyu
+            // shell (system "Open with", or a second intent while running).
+            app.wiyu.data.RecentRecorder.record(this, docUri, getIntent().getType());
             if (docUri.getScheme().equals(ContentResolver.SCHEME_CONTENT)
                     || docUri.getScheme().equals(ContentResolver.SCHEME_ANDROID_RESOURCE)) {
                 mbReadOnlyDoc  = (getIntent().getFlags() & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == 0;
@@ -384,11 +394,25 @@ public class LibreOfficeMainActivity extends AppCompatActivity implements Shared
      */
     private void saveDocumentAs(Uri newUri) {
         mDocumentUri = newUri;
-        // save in ODF format
-        mTileProvider.saveDocumentAs(mTempFile.getPath(), true);
-        saveFileToOriginalSource();
 
         String displayName = FileUtilities.retrieveDisplayNameForDocumentUri(getContentResolver(), mDocumentUri);
+        // Keep the format chosen in the system dialog instead of always
+        // rewriting the document as ODF. The file name decides; an unknown
+        // extension falls back to the editor's own document type.
+        String format = null;
+        if (displayName != null) {
+            app.wiyu.data.DocFamily family = app.wiyu.data.FileTypes.INSTANCE.familyFor(displayName, null);
+            if (family != null) {
+                format = app.wiyu.data.FileTypes.INSTANCE.saveFormatFor(displayName, family);
+            }
+        }
+        if (format != null) {
+            mTileProvider.saveDocumentAs(mTempFile.getPath(), format, true);
+        } else {
+            mTileProvider.saveDocumentAs(mTempFile.getPath(), true);
+        }
+        saveFileToOriginalSource();
+
         toolbarTop.setTitle(displayName);
         mbReadOnlyDoc = false;
         getToolbarController().setupToolbars();
@@ -470,7 +494,12 @@ public class LibreOfficeMainActivity extends AppCompatActivity implements Shared
     }
 
     public void saveFileToOriginalSource() {
-        if (mTempFile == null || mDocumentUri == null || !mDocumentUri.getScheme().equals(ContentResolver.SCHEME_CONTENT))
+        if (mTempFile == null || mDocumentUri == null)
+            return;
+        // Both SAF documents and plain files (possible with all-files access)
+        // have to be written back.
+        final String scheme = mDocumentUri.getScheme();
+        if (!ContentResolver.SCHEME_CONTENT.equals(scheme) && !ContentResolver.SCHEME_FILE.equals(scheme))
             return;
 
         boolean copyOK = false;
