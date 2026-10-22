@@ -559,3 +559,48 @@ Each phase ships behind the existing launcher, so `main` is always installable.
 3. Do we want a Favorites concept in v1, or is "Recent" enough?
 4. Tablet list–detail: preview with a real page render (costly) or metadata only?
 5. Should the shell offer "import from another app" batch flow in v1?
+
+---
+
+## 18. Implementation status
+
+What actually shipped, and where it differs from the plan above. The differences
+are deliberate: each one trades a dependency for something the app can do itself
+in less code.
+
+### Shipped
+
+| Area | Implementation |
+| --- | --- |
+| Shell | Compose `ComponentActivity` (`app.wiyu.MainActivity`), M3 theme with dynamic colour on Android 12+, hand-rolled tab state |
+| Navigation | Home / Browse / Search bottom bar, Settings as a pushed screen, `BackHandler` for path and sheet dismissal |
+| Index | `SQLiteOpenHelper` (`WiyuDb`), FTS4 shadow table for names and paths, `dirs` table rebuilt from files after each scan |
+| Discovery | SAF tree walk via `DocumentsContract`, filesystem walk with all-files access, `MediaStore` fallback |
+| Search | Debounced (120 ms) FTS4 prefix query, family filters, match highlighting, result count + elapsed ms |
+| Browse | Indexed virtual tree, root chips, family filter chip, empty states |
+| Details | Modal bottom sheet: open, save a copy, share, delete, open with another app, metadata |
+| Saving | Format-preserving `saveDocumentAs` driven by `FileTypes`, `file://` write-back, `ACTION_CREATE_DOCUMENT` copies |
+| Integration | `VIEW`/`EDIT`/`PICK`/`SEND`/`SEND_MULTIPLE`, `content` and `file` schemes, `ACTION_SEND` stream intake in the editor |
+| Guard rails | `FileTypesManifestTest` (manifest ↔ registry parity), run in CI before the APK is uploaded |
+
+### Deliberately different from the plan
+
+| Planned | Landed | Why |
+| --- | --- | --- |
+| Room + KSP | `SQLiteOpenHelper` + FTS4 | No annotation processor in the build; the schema is six queries deep, not worth codegen risk |
+| Hilt | Manual `WiyuRepo.get(context)` singleton | One repository, no graph to inject |
+| navigation-compose | Tab + path state in the shell | Three tabs and one push destination |
+| Paging 3 | Chunked `LIMIT` queries | The list is a local index, not a remote feed |
+| Coil | `ThumbnailCache` (`LruCache`, 16 MB) + `ContentResolver.loadThumbnail` | One thumbnail source, no extra dependency |
+| WorkManager period scan | In-app coroutine scan on launch, on grant, and on demand | Avoids a battery-hungry background job; the index refreshes whenever the user is in the app |
+| Autosave + recovery (phase 4) | Not implemented | The editor's own save path is untouched; interrupted saves are out of scope for the shell |
+| Multi-select (phase 2) | Single-item details sheet | Every action is reachable per file; batch operations can follow once the index has selection state |
+| Tablet list–detail (phase 6) | Single-pane, adaptive padding | The editor is a separate full-screen activity, so a preview pane would only show metadata |
+| Baseline profile / macrobenchmark (phase 6) | Not added | Needs a device farm; the shell renders a flat list over a local cursor |
+
+### Known follow-ups
+
+1. Remove `org.libreoffice.ui.LibreOfficeUIActivity` (and its layouts) once the
+   `NEW_*_STRING_KEY` constants move to `EditorBridge`.
+2. Localise the new strings (currently English; the engine keeps its ~50 locales).
+3. Device verification of the intent matrix and a TalkBack pass.
