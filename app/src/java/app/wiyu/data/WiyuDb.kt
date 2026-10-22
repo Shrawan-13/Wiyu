@@ -144,10 +144,7 @@ class WiyuDb(context: Context) : SQLiteOpenHelper(context.applicationContext, NA
                     "INSERT INTO files_fts(rowid, name, path) VALUES(?, ?, ?)",
                     arrayOf(id, item.name, path),
                 )
-                db.execSQL(
-                    "INSERT OR IGNORE INTO dirs(path, parent, root) VALUES(?, ?, ?)",
-                    arrayOf(item.dir, parentOf(item.dir), item.root),
-                )
+                insertDirChain(db, item.dir, item.root)
             }
         } else {
             val values = ContentValues().apply {
@@ -168,11 +165,32 @@ class WiyuDb(context: Context) : SQLiteOpenHelper(context.applicationContext, NA
                 "UPDATE files_fts SET name = ?, path = ? WHERE rowid = ?",
                 arrayOf(item.name, path, existing),
             )
+            insertDirChain(db, item.dir, item.root)
+        }
+    }
+
+    /**
+     * Inserts [dir] and every ancestor up to the root, so a folder that only
+     * contains sub-folders is still navigable.
+     */
+    private fun insertDirChain(db: SQLiteDatabase, dir: String, root: String) {
+        var current = dir
+        while (current.isNotEmpty()) {
             db.execSQL(
                 "INSERT OR IGNORE INTO dirs(path, parent, root) VALUES(?, ?, ?)",
-                arrayOf(item.dir, parentOf(item.dir), item.root),
+                arrayOf(current, parentOf(current), root),
             )
+            current = parentOf(current)
         }
+    }
+
+    private fun rebuildDirs(db: SQLiteDatabase, root: String) {
+        db.delete("dirs", "root = ?", arrayOf(root))
+        val dirs = mutableSetOf<String>()
+        db.rawQuery("SELECT DISTINCT dir FROM files WHERE root = ?", arrayOf(root)).use { c ->
+            while (c.moveToNext()) dirs.add(c.getString(0))
+        }
+        for (dir in dirs) insertDirChain(db, dir, root)
     }
 
     private fun existingId(db: SQLiteDatabase, uri: String): Long? =
@@ -199,10 +217,10 @@ class WiyuDb(context: Context) : SQLiteOpenHelper(context.applicationContext, NA
                 }
             }
             db.delete("files", "root = ? AND scan_id < 0", arrayOf(root))
-            db.execSQL(
-                "DELETE FROM dirs WHERE root = ? AND path NOT IN (SELECT dir FROM files)",
-                arrayOf(root),
-            )
+            // Files are the source of truth: rebuild the folder tree for this
+            // root so intermediate folders (which hold no documents themselves)
+            // stay reachable and vanished ones disappear.
+            rebuildDirs(db, root)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

@@ -23,6 +23,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -55,6 +56,8 @@ fun HomeScreen(
     onAddFolder: () -> Unit,
     onMore: (FileEntry) -> Unit,
     onSeeFamily: (DocFamily) -> Unit,
+    hasFullAccess: Boolean = true,
+    onRequestFullAccess: () -> Unit = {},
 ) {
     val version by repo.version.collectAsState()
     val scan by repo.scan.collectAsState()
@@ -97,6 +100,9 @@ fun HomeScreen(
             item(key = "empty") {
                 Column {
                     SectionHeader(title = "Get started")
+                    if (!hasFullAccess) {
+                        AllowAccessCard(onRequestFullAccess)
+                    }
                     EmptyState(
                         title = "No documents yet",
                         body = if (roots.isEmpty()) {
@@ -161,6 +167,34 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Non-blocking explanation of why "All files access" makes discovery work on
+ * Android 11+, with the two honest alternatives right below it.
+ */
+@Composable
+private fun AllowAccessCard(onRequestAccess: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = "Find documents automatically",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Let Wiyu read your documents folder so every file shows up without picking folders one by one. You can revoke this later in system settings.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(10.dp))
+            TextButton(onClick = onRequestAccess) { Text("Allow access") }
         }
     }
 }

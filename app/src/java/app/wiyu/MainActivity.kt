@@ -388,6 +388,8 @@ private fun WiyuShell(repo: WiyuRepo) {
                     browsePath = ""
                     tab = TAB_BROWSE
                 },
+                hasFullAccess = hasFullAccess,
+                onRequestFullAccess = { requestFullAccess(true) },
             )
         }
 
