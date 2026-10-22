@@ -113,6 +113,10 @@ android {
             assets.srcDirs("assets")
             res.srcDirs("res", "res_generated")
             java.srcDirs("../Bootstrap/src", "src/java")
+            // AGP's built-in Kotlin only looks at src/main/kotlin by default.
+            // This fork keeps its sources in src/java, so register that as a
+            // Kotlin source root as well (the compile task filters by suffix).
+            kotlin.srcDirs("src/java")
             if (wiyuPrebuilt) {
                 // Everything the copy*/create* tasks would have produced is
                 // already staged in the bundle.
@@ -123,6 +127,11 @@ android {
                 jniLibs.srcDirs("$liboJniLibsdir")
                 assets.srcDirs("assets_strippedUI")
             }
+        }
+        getByName("test") {
+            // Same reason: the manifest/registry parity test lives next to the
+            // Java sources.
+            kotlin.srcDirs("src/test/java")
         }
     }
 
