@@ -54,6 +54,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -117,6 +118,7 @@ fun FamilyGlyph(family: DocFamily, modifier: Modifier = Modifier, size: Dp = 44.
 
 @Composable
 fun FolderGlyph(modifier: Modifier = Modifier, size: Dp = 44.dp) {
+    val tint = MaterialTheme.colorScheme.onSecondaryContainer
     Box(
         modifier = modifier
             .size(size)
@@ -124,7 +126,7 @@ fun FolderGlyph(modifier: Modifier = Modifier, size: Dp = 44.dp) {
             .background(MaterialTheme.colorScheme.secondaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(size * 0.5f)) { drawFolderMark(MaterialTheme.colorScheme.onSecondaryContainer) }
+        Canvas(Modifier.size(size * 0.5f)) { drawFolderMark(tint) }
     }
 }
 
