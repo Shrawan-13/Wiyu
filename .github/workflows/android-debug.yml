@@ -3,11 +3,13 @@ name: Build debug APK
 # Caching strategy (the build is dominated by dependency download + asset
 # staging, so nearly every layer is cached):
 #
-#   1. Gradle user home (deps, wrapper distribution, build cache) -> setup-gradle
-#   2. Android SDK packages (platform, build-tools, platform-tools) -> explicit key
-#   3. LibreOffice core bundle (UNO jars, .so, staged assets; hundreds of MB)
-#      -> explicit key, populated from a release asset on first miss
-#   4. Gradle build cache enabled repo-wide via gradle.properties
+#   1. Gradle user home (dependencies, wrapper distribution, transforms,
+#      build cache) -> gradle/actions/setup-gradle
+#   2. LibreOffice core bundle (UNO jars, .so, staged assets; 80 MB compressed)
+#      -> explicit key, downloaded from the lo-core-<version> release on first miss
+#   3. Gradle build cache enabled repo-wide via gradle.properties
+#   4. Android SDK: intentionally not cached - the runner image already ships it,
+#      and the SDK directory is root-owned so cache extraction fails anyway
 #
 # A final job prunes the repository's Actions caches down to the newest 20.
 
@@ -61,37 +63,26 @@ jobs:
           java-version: '21'
 
       # --- Android SDK ------------------------------------------------------
-      - name: Restore Android SDK packages
-        id: sdk
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ env.ANDROID_SDK_ROOT }}/platforms/android-${{ env.COMPILE_SDK }}
-            ${{ env.ANDROID_SDK_ROOT }}/build-tools/${{ env.BUILD_TOOLS }}
-            ${{ env.ANDROID_SDK_ROOT }}/platform-tools
-            ${{ env.ANDROID_SDK_ROOT }}/licenses
-          key: android-sdk-${{ runner.os }}-${{ env.COMPILE_SDK }}-${{ env.BUILD_TOOLS }}
-
-      - name: Install Android SDK packages
-        if: steps.sdk.outputs.cache-hit != 'true'
+      # The runner image ships a mostly-populated SDK, and sdkmanager is fast
+      # (~10 s). Caching /usr/local/lib/android does not work: the directory is
+      # root-owned, so cache extraction fails and every run pays for a 120 MB
+      # download plus the install anyway. Check first, install only if needed.
+      - name: Ensure Android SDK packages
         run: |
-          sdkmanager="$(command -v sdkmanager || echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager")"
-          "$sdkmanager" --install \
-            "platforms;android-$COMPILE_SDK" \
-            "build-tools;$BUILD_TOOLS" \
-            "platform-tools"
-          yes | "$sdkmanager" --licenses > /dev/null || true
+          missing=""
+          test -d "$ANDROID_SDK_ROOT/platforms/android-$COMPILE_SDK" || missing="$missing platforms;android-$COMPILE_SDK"
+          test -d "$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS"        || missing="$missing build-tools;$BUILD_TOOLS"
+          test -d "$ANDROID_SDK_ROOT/platform-tools"                  || missing="$missing platform-tools"
 
-      - name: Save Android SDK packages
-        if: steps.sdk.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ env.ANDROID_SDK_ROOT }}/platforms/android-${{ env.COMPILE_SDK }}
-            ${{ env.ANDROID_SDK_ROOT }}/build-tools/${{ env.BUILD_TOOLS }}
-            ${{ env.ANDROID_SDK_ROOT }}/platform-tools
-            ${{ env.ANDROID_SDK_ROOT }}/licenses
-          key: android-sdk-${{ runner.os }}-${{ env.COMPILE_SDK }}-${{ env.BUILD_TOOLS }}
+          if [ -n "$missing" ]; then
+            echo "Installing:$missing"
+            sdkmanager="$(command -v sdkmanager || echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager")"
+            # shellcheck disable=SC2086
+            "$sdkmanager" --install $missing
+            yes | "$sdkmanager" --licenses > /dev/null || true
+          else
+            echo "SDK platform $COMPILE_SDK and build-tools $BUILD_TOOLS already present."
+          fi
 
       # --- Gradle (deps + wrapper + build cache) ----------------------------
       - name: Set up Gradle
