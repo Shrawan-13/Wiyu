@@ -74,29 +74,47 @@ The archive expands to `libreoffice-build/` and contains:
 | Path | Contents |
 | --- | --- |
 | `assets/` | runtime assets, already staged (program/, share/, unpack/) |
-| `jniLibs/<abi>/` | `libo-native-code.so` + NSS/sqlite libraries |
+| `jniLibs/<abi>/` | `libo-native-code.so` + NSS/sqlite libraries, one dir per ABI |
 | `jars/` | `libreoffice.jar`, `unoloader.jar` (compile classpath) |
 | `res_generated/raw/` | `license.txt`, `notice.txt` for the About dialog |
+
+Bundle v2 carries all four Android ABIs (`arm64-v8a`, `armeabi-v7a`,
+`x86_64`, `x86`; ~740 MB unpacked, 293 MB compressed). Debug builds filter to
+`arm64-v8a` in `app/build.gradle.kts`, so the debug APK stays ~92 MB; release
+builds package every ABI.
 
 When `libreoffice-build/assets` exists, the build skips the core staging tasks
 (`copyAssets`, `createRCfiles`, `createStrippedConfig*`) and consumes the bundle
 as-is. Otherwise it expects a real core tree. Force a different location with
 `-PwiyuBundle=<dir>`.
 
-The current bundle was assembled from the F-Droid LibreOffice Viewer 26.2.6.3
-APK (arm64-v8a) plus the `org.libreoffice:*:26.2.2` jars from Maven Central:
+The current bundle was assembled from the four F-Droid LibreOffice Viewer
+26.2.6.3 split APKs (one per ABI) plus the `org.libreoffice:*:26.2.2` jars from
+Maven Central:
 
 ```bash
-unzip LibreOfficeViewer.apk 'assets/*' 'lib/arm64-v8a/*' -d apk
-mkdir -p libreoffice-build/{jniLibs/arm64-v8a,jars,res_generated/raw}
-cp apk/lib/arm64-v8a/*.so           libreoffice-build/jniLibs/arm64-v8a/
-cp -r apk/assets/.                  libreoffice-build/assets/   # drop assets/dexopt
+# versionCode -> ABI: 131 arm64-v8a, 130 armeabi-v7a, 129 x86_64, 128 x86
+for vc in 131 130 129 128; do
+  curl -LO "https://f-droid.org/repo/org.documentfoundation.libreoffice_$vc.apk"
+  abi=$(unzip -l org.documentfoundation.libreoffice_$vc.apk | awk '$4 ~ /^lib\//{print $4}' | cut -d/ -f2 | sort -u)
+  unzip -oq org.documentfoundation.libreoffice_$vc.apk "lib/$abi/*" -d "split-$vc"
+  mkdir -p "libreoffice-build/jniLibs/$abi"
+  cp "split-$vc/lib/$abi/"*.so "libreoffice-build/jniLibs/$abi/"
+done
+
+# assets are shared: take one split's copy
+unzip -oq org.documentfoundation.libreoffice_131.apk 'assets/*' -d apk
+cp -r apk/assets/. libreoffice-build/assets/ && rm -rf libreoffice-build/assets/dexopt
+
 cp libreoffice-26.2.2.jar unoloader-26.2.2.jar libreoffice-build/jars/
-cp LICENSES/COPYING                 libreoffice-build/res_generated/raw/license.txt
-cp NOTICE.md                        libreoffice-build/res_generated/raw/notice.txt
-tar -czf libreoffice-core-android-v1.tar.gz -C libreoffice-build .
-gh release create lo-core-v1 libreoffice-core-android-v1.tar.gz
+cp LICENSES/COPYING libreoffice-build/res_generated/raw/license.txt
+cp NOTICE.md        libreoffice-build/res_generated/raw/notice.txt
+tar -czf libreoffice-core-android-v2.tar.gz -C libreoffice-build .
+gh release create lo-core-v2 libreoffice-core-android-v2.tar.gz
 ```
+
+Only `assets/share/registry/main.xcd` differs between splits (76 bytes, a
+build-host artifact), so one split's assets serve all ABIs.
 
 Caveat: the Java sources track LibreOffice `master`, while the prebuilt engine
 is 26.2.6.3. The JNI surface is stable, but if the app crashes at startup after

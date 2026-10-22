@@ -116,8 +116,14 @@ android {
         debug {
             // make android studio happy...
             isJniDebuggable = true
+            // Debug is arm64-only: the engine is ~200 MB per ABI, so a universal
+            // debug APK would be ~700 MB. The bundle still carries every ABI -
+            // see the release buildType below.
+            ndk { abiFilters.add("arm64-v8a") }
         }
         release {
+            // Package every ABI shipped in the engine bundle.
+            ndk { abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")) }
         }
     }
 

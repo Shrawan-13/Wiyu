@@ -43,7 +43,7 @@ env:
   BUILD_TOOLS: '36.0.0'
   # Bump this repo variable when a new core build is published; the cache key
   # follows it, so a new bundle is picked up automatically.
-  LO_CORE_VERSION: ${{ vars.LO_CORE_VERSION || 'v1' }}
+  LO_CORE_VERSION: ${{ vars.LO_CORE_VERSION || 'v2' }}
   CACHE_BUDGET: '20'
 
 jobs:
@@ -125,6 +125,8 @@ jobs:
           for d in assets jniLibs jars; do
             test -d "libreoffice-build/$d" || { echo "::error::libreoffice-build/$d missing"; exit 1; }
           done
+          test -d libreoffice-build/jniLibs/arm64-v8a || { echo "::error::arm64-v8a libs missing"; exit 1; }
+          echo "ABIs in bundle: $(ls libreoffice-build/jniLibs | tr '\n' ' ')"
           du -sh libreoffice-build
 
       - name: Save LibreOffice core

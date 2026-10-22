@@ -62,14 +62,18 @@ CI builds a debug APK on every push to `main`, on pull requests and on demand
 Locally: `./gradlew :app:assembleDebug`.
 
 The LibreOffice engine is not rebuilt in CI. It is downloaded from the
-[`lo-core-v1`](https://github.com/Shrawan-13/Wiyu/releases/tag/lo-core-v1)
+[`lo-core-v2`](https://github.com/Shrawan-13/Wiyu/releases/tag/lo-core-v2)
 release and consumed through the "prebuilt bundle" path — see
 [docs/BUILDING.md](docs/BUILDING.md).
 
-Caching layers, in order of impact: the engine bundle (80 MB, restored in ~2 s),
-Gradle user home (dependencies, wrapper, build cache), the Android SDK
-packages, and Gradle's own task output cache. A warm debug build takes roughly
-2.5 minutes; a cold one is dominated by toolchain downloads.
+The bundle ships all four Android ABIs. Debug builds filter to `arm64-v8a`
+(~92 MB APK); release builds package `arm64-v8a`, `armeabi-v7a`, `x86_64` and
+`x86`.
+
+Caching layers, in order of impact: the engine bundle (293 MB compressed,
+restored from the Actions cache), Gradle user home (dependencies, wrapper,
+build cache), and Gradle's own task output cache. A warm debug build takes
+roughly 1.5 minutes; a cold one is dominated by toolchain downloads.
 
 ## Roadmap
 
