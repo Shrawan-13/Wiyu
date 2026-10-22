@@ -60,18 +60,22 @@ class WiyuRepo private constructor(private val app: Context) {
         scope.launch {
             val scanner = Scanner(app, db)
             var failures = 0
+            // Each source counts from zero, so the reported progress carries the
+            // offset of the sources already finished.
+            var base = 0
             var indexed = 0
-            val progress: (Int) -> Unit = { n -> publishProgress(n) }
+            val progress: (Int) -> Unit = { n -> publishProgress(base + n) }
             try {
                 val roots = db.roots()
                 val rootOutcome = scanner.scanRoots(roots, progress)
                 failures += rootOutcome.failures
-                indexed = rootOutcome.indexed
+                base = rootOutcome.indexed
                 val deviceOutcome = if (Scanner.hasFullStorageAccess(app)) {
-                    scanner.scanDevice(progress).also { indexed += it.indexed }
+                    scanner.scanDevice(progress)
                 } else {
-                    scanner.scanMediaStore(progress).also { indexed += it.indexed }
+                    scanner.scanMediaStore(progress)
                 }
+                indexed = base + deviceOutcome.indexed
                 failures += deviceOutcome.failures
                 settings.setLastScanAt(System.currentTimeMillis())
                 scanState.value = ScanState(
@@ -151,26 +155,28 @@ class WiyuRepo private constructor(private val app: Context) {
         if (uri == null) return
         val scheme = uri.scheme ?: return
         if (scheme != "content" && scheme != "file") return
-        var displayName = name
-        var size = 0L
-        var modified = 0L
-        if (scheme == "content") {
+        // Called straight from a click handler and from the editor's onCreate,
+        // so the metadata query and the insert happen off the caller's thread.
+        scope.launch {
             try {
-                app.contentResolver.query(uri, null, null, null, null)?.use { c ->
-                    if (c.moveToFirst()) {
-                        displayName = displayName ?: c.stringOrNull(OpenableColumns.DISPLAY_NAME)
-                        size = c.longOrNull(OpenableColumns.SIZE) ?: 0L
+                var displayName = name
+                var size = 0L
+                if (scheme == "content") {
+                    app.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                        if (c.moveToFirst()) {
+                            displayName = displayName ?: c.stringOrNull(OpenableColumns.DISPLAY_NAME)
+                            size = c.longOrNull(OpenableColumns.SIZE) ?: 0L
+                        }
                     }
                 }
+                val resolvedMime = mime ?: app.contentResolver.getType(uri)
+                db.recordOpen(uri.toString(), displayName, resolvedMime, size, 0L)
+                refresh()
             } catch (t: Throwable) {
-                Log.d(TAG, "cannot read metadata for $uri")
+                // Bookkeeping must never prevent a document from opening.
+                Log.d(TAG, "cannot record open for $uri: ${t.message}")
             }
         }
-        val resolvedMime = mime ?: app.contentResolver.getType(uri)
-        db.recordOpen(uri.toString(), displayName, resolvedMime, size, modified)
-        refresh()
-        // A failed/temporary grant should not prevent the row from being useful,
-        // but we never want to crash the caller over it.
     }
 
     private fun Cursor.stringOrNull(column: String): String? {
@@ -186,16 +192,21 @@ class WiyuRepo private constructor(private val app: Context) {
     /** Imports the old SharedPreferences recents list once, so nothing is lost. */
     fun migrateLegacyRecents() {
         if (settings.current.onboardingDone) return
-        val prefs = app.getSharedPreferences("EXPLORER_PREFS", Context.MODE_PRIVATE)
-        val raw = prefs.getString("RECENT_DOCUMENT_URIS", "") ?: return
-        val uris = raw.split(' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
-        if (uris.isEmpty()) return
-        for (value in uris) {
-            val uri = Uri.parse(value)
-            recordOpen(uri, null, null)
+        scope.launch {
+            try {
+                val prefs = app.getSharedPreferences("EXPLORER_PREFS", Context.MODE_PRIVATE)
+                val raw = prefs.getString("RECENT_DOCUMENT_URIS", "").orEmpty()
+                val uris = raw.split(' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+                for (value in uris) {
+                    val uri = Uri.parse(value)
+                    recordOpen(uri, null, null)
+                }
+                settings.setOnboardingDone(true)
+                Log.d(TAG, "imported ${uris.size} legacy recents")
+            } catch (t: Throwable) {
+                Log.d(TAG, "legacy recents import failed: ${t.message}")
+            }
         }
-        settings.setOnboardingDone(true)
-        Log.d(TAG, "imported ${uris.size} legacy recents")
     }
 
     companion object {

@@ -158,6 +158,7 @@ private fun WiyuShell(repo: WiyuRepo) {
 
     val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
+            hasFullAccess = Scanner.hasFullStorageAccess(context)
             repo.startScan("storage permission granted")
         } else {
             notify("Without access, Wiyu only sees the folders you add")
