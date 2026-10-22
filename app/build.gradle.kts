@@ -71,9 +71,11 @@ android {
         minSdk = androidMinSdkVersion
         versionCode = if (project.hasProperty("cmdVersionCode")) project.property("cmdVersionCode").toString().toInt() else 1
         versionName = androidVersionName
-        buildConfigField("String", "BUILD_ID_SHORT", buildIdShort)
-        buildConfigField("String", "VENDOR", vendor)
-        buildConfigField("String", "PRIVACY_POLICY_URL", privacyPolicyUrl)
+        // buildConfigField takes a Java expression, so strings must be quoted
+        // (an empty privacyPolicyUrl would otherwise emit `= ;`).
+        buildConfigField("String", "BUILD_ID_SHORT", "\"$buildIdShort\"")
+        buildConfigField("String", "VENDOR", "\"$vendor\"")
+        buildConfigField("String", "PRIVACY_POLICY_URL", "\"$privacyPolicyUrl\"")
         // Wiyu is a single app that both views and edits: the former
         // "strippedUI" / "strippedUIEditing" / "quest" flavors are gone.
         buildConfigField("boolean", "ALLOW_EDITING", "true")
