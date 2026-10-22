@@ -59,6 +59,49 @@ cp lo-build.properties.example lo-build.properties   # edit the paths
 Without `lo-build.properties`, the build looks for `libreoffice-build/instdir`
 and `app/jniLibs` in this repository.
 
+### Prebuilt bundle (what CI uses)
+
+A LibreOffice core build takes hours, so CI does not run it. Instead it
+downloads a bundle published as a release asset:
+
+```
+lo-core-<version>          release tag
+  libreoffice-core-android-<version>.tar.gz
+```
+
+The archive expands to `libreoffice-build/` and contains:
+
+| Path | Contents |
+| --- | --- |
+| `assets/` | runtime assets, already staged (program/, share/, unpack/) |
+| `jniLibs/<abi>/` | `libo-native-code.so` + NSS/sqlite libraries |
+| `jars/` | `libreoffice.jar`, `unoloader.jar` (compile classpath) |
+| `res_generated/raw/` | `license.txt`, `notice.txt` for the About dialog |
+
+When `libreoffice-build/assets` exists, the build skips the core staging tasks
+(`copyAssets`, `createRCfiles`, `createStrippedConfig*`) and consumes the bundle
+as-is. Otherwise it expects a real core tree. Force a different location with
+`-PwiyuBundle=<dir>`.
+
+The current bundle was assembled from the F-Droid LibreOffice Viewer 26.2.6.3
+APK (arm64-v8a) plus the `org.libreoffice:*:26.2.2` jars from Maven Central:
+
+```bash
+unzip LibreOfficeViewer.apk 'assets/*' 'lib/arm64-v8a/*' -d apk
+mkdir -p libreoffice-build/{jniLibs/arm64-v8a,jars,res_generated/raw}
+cp apk/lib/arm64-v8a/*.so           libreoffice-build/jniLibs/arm64-v8a/
+cp -r apk/assets/.                  libreoffice-build/assets/   # drop assets/dexopt
+cp libreoffice-26.2.2.jar unoloader-26.2.2.jar libreoffice-build/jars/
+cp LICENSES/COPYING                 libreoffice-build/res_generated/raw/license.txt
+cp NOTICE.md                        libreoffice-build/res_generated/raw/notice.txt
+tar -czf libreoffice-core-android-v1.tar.gz -C libreoffice-build .
+gh release create lo-core-v1 libreoffice-core-android-v1.tar.gz
+```
+
+Caveat: the Java sources track LibreOffice `master`, while the prebuilt engine
+is 26.2.6.3. The JNI surface is stable, but if the app crashes at startup after
+an engine bump, check for API drift between the two.
+
 Every path can also be passed on the command line:
 
 ```bash

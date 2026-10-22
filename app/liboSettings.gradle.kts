@@ -57,6 +57,25 @@ extra["liboSharedResFolder"] = loSetting("liboSharedResFolder", "share/registry/
 // output can simply be dropped into app/jniLibs/<abi>/.
 extra["liboJniLibsdir"] = loSetting("liboJniLibsdir", "jniLibs")
 
+// --- prebuilt bundle --------------------------------------------------------
+
+// The CI/release path: instead of a LibreOffice source tree, use the bundle
+// published as the `lo-core-<version>` release asset. It contains the staged
+// runtime assets, the native libraries and the UNO jars, i.e. exactly what the
+// copy*/create* tasks below would otherwise produce from a core build:
+//
+//   libreoffice-build/assets/           -> APK assets (already staged)
+//   libreoffice-build/jniLibs/<abi>/    -> .so files
+//   libreoffice-build/jars/*.jar        -> compile classpath
+//   libreoffice-build/res_generated/    -> res/raw license + notice
+//
+// Detection is by presence of assets/, so a real core tree keeps working.
+val prebuiltBundleDir = rootProject.file(loSetting("wiyuBundle", "libreoffice-build"))
+val usePrebuiltBundle = prebuiltBundleDir.resolve("assets").isDirectory
+
+extra["wiyuBundleDir"] = prebuiltBundleDir.absolutePath
+extra["wiyuPrebuilt"] = usePrebuiltBundle
+
 // --- toolchain --------------------------------------------------------------
 
 // Leave both empty to let the Android Gradle Plugin pick the NDK installed in
@@ -85,7 +104,7 @@ extra["androidMinSdkVersion"] = loSetting("androidMinSdkVersion", "21").toInt()
 
 // --- pre-flight check -------------------------------------------------------
 
-// Without the core build tree the .so files and UNO jars are missing, and the
+// Without the engine artefacts the .so files and UNO jars are missing, and the
 // failure would otherwise surface as a wall of "package does not exist" errors.
 // Registered in app/build.gradle.kts on preBuild.
 // Note: capture these here - inside a task action, `extra` means the *task's*
@@ -93,27 +112,37 @@ extra["androidMinSdkVersion"] = loSetting("androidMinSdkVersion", "21").toInt()
 val coreInstdirDir = file(extra["liboInstdir"] as String)
 val coreJavaJarsDir = file("${extra["liboInstdir"]}/${extra["liboUREJavaFolder"]}")
 val coreJniLibsDir = file(extra["liboJniLibsdir"] as String)
+val bundleAssetsDir = prebuiltBundleDir.resolve("assets")
+val bundleJniLibsDir = prebuiltBundleDir.resolve("jniLibs")
+val bundleJarsDir = prebuiltBundleDir.resolve("jars")
 
 tasks.register("wiyuCoreReady") {
     group = "verification"
-    description = "Checks that the prebuilt LibreOffice core artefacts are present."
+    description = "Checks that the LibreOffice engine artefacts are present."
 
     doLast {
         val missing = buildList {
-            if (!coreInstdirDir.isDirectory) add("core install tree: $coreInstdirDir")
-            if (!coreJavaJarsDir.isDirectory) add("UNO Java bindings: $coreJavaJarsDir")
-            if (!coreJniLibsDir.isDirectory) add("native libraries: $coreJniLibsDir")
+            if (usePrebuiltBundle) {
+                if (!bundleAssetsDir.isDirectory) add("bundle assets: $bundleAssetsDir")
+                if (!bundleJniLibsDir.isDirectory) add("bundle native libraries: $bundleJniLibsDir")
+                if (!bundleJarsDir.isDirectory) add("bundle UNO jars: $bundleJarsDir")
+            } else {
+                if (!coreInstdirDir.isDirectory) add("core install tree: $coreInstdirDir")
+                if (!coreJavaJarsDir.isDirectory) add("UNO Java bindings: $coreJavaJarsDir")
+                if (!coreJniLibsDir.isDirectory) add("native libraries: $coreJniLibsDir")
+            }
         }
         if (missing.isNotEmpty()) {
             throw GradleException(
                 """
-                |Wiyu cannot build: the prebuilt LibreOffice core is missing.
+                |Wiyu cannot build: the LibreOffice engine is missing.
                 |
                 |  missing: ${missing.joinToString("\n           ")}
                 |
-                |Build the core first (docs/BUILDING.md) or point the project at an
-                |existing tree with lo-build.properties (see lo-build.properties.example).
-                |To work on UI code without the engine, run Gradle with -PskipCoreCheck=true.
+                |Fetch the prebuilt bundle from the lo-core-<version> release
+                |(docs/BUILDING.md), or point the project at a LibreOffice core
+                |build tree with lo-build.properties.
+                |To run Gradle without the engine, use -PskipCoreCheck=true.
                 """.trimMargin()
             )
         }

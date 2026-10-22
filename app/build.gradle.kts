@@ -24,17 +24,24 @@ val vendor: String by extra
 val privacyPolicyUrl: String by extra
 val androidApplicationId: String by extra
 val androidMinSdkVersion: Int by extra
+val wiyuPrebuilt: Boolean by extra
+val wiyuBundleDir: String by extra
 
 // compile-time dependencies
 dependencies {
-    implementation(fileTree(mapOf(
-            "dir" to "$liboInstdir/$liboUREJavaFolder",
-            "include" to listOf(
-                    "java_uno.jar",
-                    "libreoffice.jar",
-                    "unoloader.jar"
-            )
-    )))
+    if (wiyuPrebuilt) {
+        // Prebuilt bundle: the UNO jars published with the engine release.
+        implementation(fileTree(wiyuBundleDir) { include("jars/*.jar") })
+    } else {
+        implementation(fileTree(mapOf(
+                "dir" to "$liboInstdir/$liboUREJavaFolder",
+                "include" to listOf(
+                        "java_uno.jar",
+                        "libreoffice.jar",
+                        "unoloader.jar"
+                )
+        )))
+    }
     implementation(libs.material)
     implementation(libs.constraintlayout)
     implementation(libs.preference)
@@ -84,8 +91,16 @@ android {
             assets.srcDirs("assets")
             res.srcDirs("res", "res_generated")
             java.srcDirs("../Bootstrap/src", "src/java")
-            jniLibs.srcDirs("$liboJniLibsdir")
-            assets.srcDirs("assets_strippedUI")
+            if (wiyuPrebuilt) {
+                // Everything the copy*/create* tasks would have produced is
+                // already staged in the bundle.
+                assets.srcDirs("$wiyuBundleDir/assets")
+                res.srcDirs("$wiyuBundleDir/res_generated")
+                jniLibs.srcDirs("$wiyuBundleDir/jniLibs")
+            } else {
+                jniLibs.srcDirs("$liboJniLibsdir")
+                assets.srcDirs("assets_strippedUI")
+            }
         }
     }
 
@@ -325,7 +340,9 @@ tasks.register("createRCfiles") {
 
 // creating the UI stuff is cheap, don't bother only applying it for the flavor...
 tasks.preBuild {
-    dependsOn("createRCfiles", "createStrippedConfigMain", "createStrippedConfigRegistry", "copyAppResources")
+    if (!wiyuPrebuilt) {
+        dependsOn("createRCfiles", "createStrippedConfigMain", "createStrippedConfigRegistry", "copyAppResources")
+    }
     if (!project.hasProperty("skipCoreCheck")) {
         dependsOn(tasks.named("wiyuCoreReady"))
     }

@@ -1,0 +1,214 @@
+name: Build debug APK
+
+# Caching strategy (the build is dominated by dependency download + asset
+# staging, so nearly every layer is cached):
+#
+#   1. Gradle user home (deps, wrapper distribution, build cache) -> setup-gradle
+#   2. Android SDK packages (platform, build-tools, platform-tools) -> explicit key
+#   3. LibreOffice core bundle (UNO jars, .so, staged assets; hundreds of MB)
+#      -> explicit key, populated from a release asset on first miss
+#   4. Gradle build cache enabled repo-wide via gradle.properties
+#
+# A final job prunes the repository's Actions caches down to the newest 20.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSES/**'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSES/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # ubuntu-latest ships the SDK here; actions/cache cannot read runner env vars,
+  # so declare it explicitly for use in cache paths.
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  COMPILE_SDK: '36'
+  BUILD_TOOLS: '36.0.0'
+  # Bump this repo variable when a new core build is published; the cache key
+  # follows it, so a new bundle is picked up automatically.
+  LO_CORE_VERSION: ${{ vars.LO_CORE_VERSION || 'v1' }}
+  CACHE_BUDGET: '20'
+
+jobs:
+  build:
+    name: Assemble debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # --- Android SDK ------------------------------------------------------
+      - name: Restore Android SDK packages
+        id: sdk
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.ANDROID_SDK_ROOT }}/platforms/android-${{ env.COMPILE_SDK }}
+            ${{ env.ANDROID_SDK_ROOT }}/build-tools/${{ env.BUILD_TOOLS }}
+            ${{ env.ANDROID_SDK_ROOT }}/platform-tools
+            ${{ env.ANDROID_SDK_ROOT }}/licenses
+          key: android-sdk-${{ runner.os }}-${{ env.COMPILE_SDK }}-${{ env.BUILD_TOOLS }}
+
+      - name: Install Android SDK packages
+        if: steps.sdk.outputs.cache-hit != 'true'
+        run: |
+          sdkmanager="$(command -v sdkmanager || echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager")"
+          "$sdkmanager" --install \
+            "platforms;android-$COMPILE_SDK" \
+            "build-tools;$BUILD_TOOLS" \
+            "platform-tools"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+
+      - name: Save Android SDK packages
+        if: steps.sdk.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.ANDROID_SDK_ROOT }}/platforms/android-${{ env.COMPILE_SDK }}
+            ${{ env.ANDROID_SDK_ROOT }}/build-tools/${{ env.BUILD_TOOLS }}
+            ${{ env.ANDROID_SDK_ROOT }}/platform-tools
+            ${{ env.ANDROID_SDK_ROOT }}/licenses
+          key: android-sdk-${{ runner.os }}-${{ env.COMPILE_SDK }}-${{ env.BUILD_TOOLS }}
+
+      # --- Gradle (deps + wrapper + build cache) ----------------------------
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+          gradle-home-cache-cleanup: true
+          validate-wrappers: true
+
+      # --- LibreOffice core ------------------------------------------------
+      - name: Restore LibreOffice core
+        id: core
+        uses: actions/cache/restore@v4
+        with:
+          path: libreoffice-build
+          key: lo-core-${{ env.LO_CORE_VERSION }}-${{ runner.os }}
+          fail-on-cache-miss: false
+
+      # Expected layout of the release asset (see docs/BUILDING.md):
+      #   libreoffice-build/instdir/      -> -PliboInstdir
+      #   libreoffice-build/jniLibs/      -> -PliboJniLibsdir
+      - name: Download LibreOffice core bundle
+        if: steps.core.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          asset="libreoffice-core-android-$LO_CORE_VERSION.tar.gz"
+          if ! gh release download "lo-core-$LO_CORE_VERSION" \
+                 --pattern "$asset" --dir /tmp --clobber; then
+            echo "::error title=LibreOffice core missing::No release 'lo-core-$LO_CORE_VERSION' with asset '$asset'."
+            echo "Publish the core bundle first (docs/BUILDING.md), or set the"
+            echo "LO_CORE_VERSION repository variable to an existing release."
+            exit 1
+          fi
+          mkdir -p libreoffice-build
+          tar -xzf "/tmp/$asset" -C libreoffice-build --strip-components=1
+
+      - name: Verify LibreOffice core
+        run: |
+          for d in assets jniLibs jars; do
+            test -d "libreoffice-build/$d" || { echo "::error::libreoffice-build/$d missing"; exit 1; }
+          done
+          du -sh libreoffice-build
+
+      - name: Save LibreOffice core
+        if: steps.core.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: libreoffice-build
+          key: lo-core-${{ env.LO_CORE_VERSION }}-${{ runner.os }}
+
+      # --- Build ------------------------------------------------------------
+      - name: Assemble debug APK
+        run: |
+          ./gradlew :app:assembleDebug \
+            --build-cache --parallel --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiyu-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  prune-caches:
+    name: Prune caches
+    # Run even when the build fails; skip on PRs (read-only token, and PR caches
+    # belong to the PR's own ref scope).
+    needs: build
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Keep the newest ${{ env.CACHE_BUDGET }} caches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          newer_first='repos/'"$REPO"'/actions/caches?per_page=100&sort=created_at&direction=desc'
+
+          gh api --paginate "$newer_first" \
+            --jq '.actions_caches[] | [.id, .created_at, .size_in_bytes, .key] | @tsv' \
+            > /tmp/caches.tsv || : > /tmp/caches.tsv
+
+          total=$(wc -l < /tmp/caches.tsv | tr -d ' ')
+          echo "Found $total caches; budget is $CACHE_BUDGET."
+
+          {
+            echo "### Cache usage"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| caches found | $total |"
+            echo "| budget | $CACHE_BUDGET |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$total" -le "$CACHE_BUDGET" ]; then
+            echo "Nothing to delete."
+            exit 0
+          fi
+
+          # Newest first, so everything past the budget is the older tail.
+          deleted=0
+          while IFS=$'\t' read -r id created size key; do
+            if gh api -X DELETE "repos/$REPO/actions/caches/$id" > /dev/null; then
+              echo "deleted $id  $created  $key"
+              deleted=$((deleted + 1))
+            else
+              echo "::warning::failed to delete cache $id ($key)"
+            fi
+          done < <(tail -n +$((CACHE_BUDGET + 1)) /tmp/caches.tsv)
+
+          echo "Deleted $deleted caches, kept the newest $CACHE_BUDGET."
+          echo "| deleted | $deleted |" >> "$GITHUB_STEP_SUMMARY"
