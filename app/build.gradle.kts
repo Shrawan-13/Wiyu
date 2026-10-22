@@ -45,6 +45,19 @@ dependencies {
     implementation(libs.material)
     implementation(libs.constraintlayout)
     implementation(libs.preference)
+
+    // Wiyu shell: Compose + Material 3. The document engine and the editor
+    // activity stay on the View system; only the browser UI is Compose.
+    implementation(platform(libs.compose.bom))
+    implementation(libs.activity.compose)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.core.ktx)
+    implementation(libs.documentfile)
+    debugImplementation(libs.compose.ui.tooling)
 }
 
 base {
@@ -83,6 +96,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     // uses non-conventional source layout, so need to reconfigure accordingly

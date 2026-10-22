@@ -14,6 +14,19 @@
         android:hardwareAccelerated="true"
         android:largeHeap="false">
 
+        <!-- Wiyu shell (Compose / Material 3). This is the launcher; the
+             document editor stays in LibreOfficeMainActivity below. -->
+        <activity
+            android:name="app.wiyu.MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Wiyu"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!-- Viewer Activity -->
         <!-- When changing android:windowSoftInputMode, please don't specify multiple "adjust..." or "state...". -->
         <activity
@@ -92,14 +105,10 @@
             android:label="@string/app_name_settings">
         </activity>
 
-        <!-- Document Browser Activity -->
+        <!-- Legacy document browser. Superseded by app.wiyu.MainActivity; kept
+             only until the remaining engine entry points are migrated. -->
         <activity android:name="org.libreoffice.ui.LibreOfficeUIActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:exported="false" />
 
         <activity android:name=".PresentationActivity"
             android:screenOrientation="landscape" >
